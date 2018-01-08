@@ -12,6 +12,15 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
+constexpr double target_speed = 40;
+constexpr double min_speed = 1;
+
+// Max steering value constraint
+// Keep the steer value to [-max_steer_value, max_steer_value]
+// This helps to reduce the oscillations when going around curves
+// Used as a dampener (if < 1)
+constexpr double max_steer_value = 0.6;
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -32,8 +41,20 @@ int main()
 {
   uWS::Hub h;
 
-  PID pid;
+  PID     pid;
+
   // TODO: Initialize the pid variable.
+  // If not training, set the p_initial parameters to the desired values
+  // with max_steer_value = 1.0, Kp: 0.603622 Ki: 0.0001 Kd: 9.92264
+  // with max_steer_value = 0.6, ???
+  //
+  std::vector<double> p_initial = { 1, .5, 8 };
+  std::vector<double> dp_initial = { 1, 0.5, 1 };
+  pid.Init(p_initial);
+  pid.SetTrainingParams(true /* is training */,
+                        dp_initial,
+                        5000 /* number of steps per run, gets me one full lap most tries */,
+                        500 /* number of steps to skip before collecting error info */);
 
   h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -58,15 +79,28 @@ int main()
           * another PID controller to control the speed!
           */
           
-          // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          // If not training, this call can be shortened to:
+          //    pid.Update(cte)
+          //
+          pid.Update(cte,
+                     [&ws]() {
+                        std::string reset_msg = "42[\"reset\",{}]";
+                        ws.send(reset_msg.data(), reset_msg.length(), uWS::OpCode::TEXT);
+                        },
+                     (speed < min_speed ? true : false));
+
+          // Keep the values between [-max_steer_value, max_steer_value]
+          steer_value = pid.TotalError();
+          steer_value = fmax(steer_value, -max_steer_value);
+          steer_value = fmin(steer_value, max_steer_value);
 
           json msgJson;
-          msgJson["steering_angle"] = steer_value;
+          msgJson["steering_angle"] = steer_value / deg2rad(25);
           msgJson["throttle"] = 0.3;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+
         }
       } else {
         // Manual driving
