@@ -12,14 +12,15 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
-constexpr double target_speed = 40;
+//constexpr double target_speed = 42;
+constexpr double target_speed = 62;
 constexpr double min_speed = 1;
 
 // Max steering value constraint
 // Keep the steer value to [-max_steer_value, max_steer_value]
 // This helps to reduce the oscillations when going around curves
 // Used as a dampener (if < 1)
-constexpr double max_steer_value = 0.6;
+constexpr double max_steer_value = 1.0;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -42,21 +43,28 @@ int main()
   uWS::Hub h;
 
   PID     pid;
+  PID     speed_pid;
 
   // TODO: Initialize the pid variable.
   // If not training, set the p_initial parameters to the desired values
-  // with max_steer_value = 1.0, Kp: 0.603622 Ki: 0.0001 Kd: 9.92264
-  // with max_steer_value = 0.6, ???
+  // with max_steer_value = 1.0, Kp: 0.603622 Ki: 0.0001 Kd: 9.92264, 500/5000
+  // with max_steer_value = 0.6, Kp: 0.649051 Ki: 0.00439805 Kd: 7.2 , 2000/6000
   //
-  std::vector<double> p_initial = { 1, .5, 8 };
-  std::vector<double> dp_initial = { 1, 0.5, 1 };
+  // Due to the oscillations, I resorted to manual tweaking to get a smoother
+  // ride.
+  //
+  std::vector<double> p_initial = { 0.453622, 0.00019805, 11.9};
+  std::vector<double> dp_initial = { 1, 0.1, 1 };
   pid.Init(p_initial);
-  pid.SetTrainingParams(true /* is training */,
+  pid.SetTrainingParams(false /* is training */,
                         dp_initial,
-                        5000 /* number of steps per run, gets me one full lap most tries */,
-                        500 /* number of steps to skip before collecting error info */);
+                        6000 /* number of steps per run, gets me one full lap most tries */,
+                        2000 /* number of steps to skip before collecting error info */);
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  std::vector<double> speedp_initial = { 0.2, 0, 0 };
+  speed_pid.Init(speedp_initial);
+  
+  h.onMessage([&pid, &speed_pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -88,15 +96,34 @@ int main()
                         ws.send(reset_msg.data(), reset_msg.length(), uWS::OpCode::TEXT);
                         },
                      (speed < min_speed ? true : false));
+          speed_pid.Update(speed - target_speed);
 
           // Keep the values between [-max_steer_value, max_steer_value]
+          //
           steer_value = pid.TotalError();
+          
           steer_value = fmax(steer_value, -max_steer_value);
           steer_value = fmin(steer_value, max_steer_value);
+          
+          double constrained_steer_value = steer_value;
+
+          // Adjust the steer value by the speed, the faster
+          // the car is moving, the smaller the steer value allowed
+          if (fabs(speed) > 11)
+            steer_value = steer_value / (1.2*sqrt(fabs(speed-10)));
+          
+          // Depending on the steer value, adjust the throttle
+          // (the tighter the turn the less throttle)
+          // throttle-steer curve
+          //                            0     1     2     3     4     5     6     7      8       9       10
+          double throttle_adjust[] = { 1.00, 1.00, 0.70, 0.50, 0.30, 0.15, 0.10, 0.01, -0.001, -0.002, -0.007 };
+          double throttle = speed_pid.TotalError();
+          if (speed > 20)
+            throttle *= throttle_adjust[static_cast<int>(fabs(constrained_steer_value*10))];
 
           json msgJson;
           msgJson["steering_angle"] = steer_value / deg2rad(25);
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);

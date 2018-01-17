@@ -11,7 +11,7 @@ constexpr double early_termination_penalty = 9.0;
 
 // This is the tolerance used to determine when to
 // stop twiddle.
-constexpr double twiddle_tolerance = 0.01;
+constexpr double twiddle_tolerance = 0.1;
 
 // These parameters control how much we increase/decrease
 // the model params.

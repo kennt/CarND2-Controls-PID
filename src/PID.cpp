@@ -204,7 +204,7 @@ void PID::Train(double cte, unsigned int state, bool terminate_run)
       if (terminate_run && (m_iter > m_steps_to_skip))
       {
         // This is a shortcut, if the car is stalled, assume the same cte for rest of the run
-        m_current_err += early_termination_penalty * (cte * cte * (m_steps_per_run - m_iter));
+        m_current_err += early_termination_penalty * cte * cte * (m_steps_per_run - m_iter);
         m_iter = m_steps_per_run;
       }
       if (m_iter >= m_steps_per_run)
