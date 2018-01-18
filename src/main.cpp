@@ -12,9 +12,21 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
-//constexpr double target_speed = 42;
-constexpr double target_speed = 62;
+// To ensure that we reach the target speed at some point,
+// aim for just a little higher than the actual target.
+constexpr double target_speed = 52;
+//constexpr double target_speed = 62;
 constexpr double min_speed = 1;
+
+// These two bool values decide whether or not to adjust
+// the values dynamically.
+// Adjust the steer value depending on the speed
+// The higher the speed, the lower the steer value allowed
+constexpr bool use_steer_speed_adjustment = true;
+
+// Adjust the throttle depending on the steer value
+// The higher the steer value (before adjustement), the lower the throttle
+constexpr bool use_throttle_steer_adjustment = true;
 
 // Max steering value constraint
 // Keep the steer value to [-max_steer_value, max_steer_value]
@@ -101,25 +113,30 @@ int main()
           // Keep the values between [-max_steer_value, max_steer_value]
           //
           steer_value = pid.TotalError();
-          
+
           steer_value = fmax(steer_value, -max_steer_value);
           steer_value = fmin(steer_value, max_steer_value);
-          
           double constrained_steer_value = steer_value;
 
-          // Adjust the steer value by the speed, the faster
-          // the car is moving, the smaller the steer value allowed
-          if (fabs(speed) > 11)
-            steer_value = steer_value / (1.2*sqrt(fabs(speed-10)));
-          
-          // Depending on the steer value, adjust the throttle
-          // (the tighter the turn the less throttle)
-          // throttle-steer curve
-          //                            0     1     2     3     4     5     6     7      8       9       10
-          double throttle_adjust[] = { 1.00, 1.00, 0.70, 0.50, 0.30, 0.15, 0.10, 0.01, -0.001, -0.002, -0.007 };
+          if (use_steer_speed_adjustment)
+          {
+            // Adjust the steer value by the speed, the faster
+            // the car is moving, the smaller the steer value allowed
+            if (fabs(speed) > 11)
+              steer_value = steer_value / (1.2*sqrt(fabs(speed-10)));
+          }
+
           double throttle = speed_pid.TotalError();
-          if (speed > 20)
-            throttle *= throttle_adjust[static_cast<int>(fabs(constrained_steer_value*10))];
+          if (use_throttle_steer_adjustment)
+          {
+            // Depending on the steer value, adjust the throttle
+            // (the tighter the turn the less throttle)
+            // throttle-steer curve
+            //                            0     1     2     3     4     5     6     7      8       9       10
+            double throttle_adjust[] = { 1.00, 1.00, 0.70, 0.50, 0.30, 0.10, 0.03, 0.01, -0.001, -0.003, -0.007 };
+            if (speed > 20)
+              throttle *= throttle_adjust[static_cast<int>(fabs(constrained_steer_value*10))];
+          }
 
           json msgJson;
           msgJson["steering_angle"] = steer_value / deg2rad(25);
