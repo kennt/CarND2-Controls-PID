@@ -27,6 +27,20 @@ There are two PID controllers that were implemented. The first controller is the
 The second controller was used for the throttle (to maintain a constant speed).  This was implemented only using the P parameter.
 
 
+### Kp, Ki, and Kd Hyperparameters
+
+Initially, I experimented with the parameters (Kp, Ki, and Kd) to see the effects of each hyperparameter.
+
+Kp (the proportional parameter) was adjusted to move the car in the desired direction (starting on a relatively straight portion of the track made this much easier to tune).  For example, setting all parameters to 0, means that the car does not respond to the CTE at all and moves in a straight line.  Setting the other parameters (Ki=0.001, Kd=10) but leaving Kp=0, the car moves relatively well around the straight and slightly curving portions of the track, but fails around the curves.  This is due to the car not being able to react quickly enough to the turns.  This is fixed by increasing the Kp value.
+
+The more difficult parameter was to tune the Kd (the derivative portion). This was adjusted to smooth out the oscillations as the car adjusted around a CTE of 0.  This was a little more difficult to tune, since if the run was too smooth, the car would run off the track during the tighter turns.  In order to get the smooth behavior (at higher speeds, at lower speeds this behavior is not as noticeable), Kd is much larger than Kp (my values are around 20x higher).
+
+The Ki (the integral parameter) seemed to right about 0. I think the simulator didn't have a bias, so it seemed to run fine with 0 or just a little above 0. This may be due to running the track in a counter-clockwise direction.
+
+After running the simulator manually, I implemented twiddle to turn the hyperparameters with my experiments as a rough guide of where to start.
+
+
+
 ### The Twiddle implementation in the PID controller
 
 The Twiddle algorithm was implemented using the basic outline given in the lectures.  However, the algorithm was implemented as a state machine.  This let me keep the interface the same (so the code in main.cpp stays roughly the same for training and for the actual run).
@@ -93,6 +107,7 @@ After the adjustment, here is the same turn
 This still has problems as it still enters the first turn after the bridge too fast (capturing the video also adds some lag to the response).  This throttle-steer curve was hand adjusted.
 
 ## Hyperparameter selection
+
 The initial parameter set (with just the PID algorithm for steering) was selected using Twiddle with an initial parameter set (Kp, Ki, Kd) = (0.5, 0.0001, 1) with dp = (1, 1, 1). I let this run for 5000 steps and skipping the first 500 steps (the code has different values since I had to adjust as I switched to a lower resolution in the simulator).  5000 steps was enough to usually get one full lap of the track.
 
 This gave me the following values:
@@ -110,6 +125,7 @@ In the end, after the manual tweaking, the final hyperparameters chosen were:
 ```
     Kp: 0.453622 Ki: 0.00019805 Kd: 11.9
 ```
+
 
 ## Future improvements
 
